@@ -14,48 +14,57 @@ struct ContentView: View {
     @State private var showingError = false
     @State private var webViewKey = UUID()
     
-    let webURL = URL(string: "https://blankee.example.com")!
+    var webURL: URL {
+        URL(string: Config.baseURL)!
+    }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Loading indicator
-            if isLoading {
-                ProgressView()
-                    .frame(height: 3)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(height: 3)
-            }
+        ZStack {
+            // Background color that extends into status bar area
+            // Blankee header color: #2AAAA8
+            Color(red: 42/255, green: 170/255, blue: 168/255)
+                .ignoresSafeArea(edges: .top)
             
-            // WebView with pull-to-refresh
-            RefreshableWebView(
-                url: webURL,
-                canGoBack: $canGoBack,
-                canGoForward: $canGoForward,
-                isLoading: $isLoading,
-                webViewKey: $webViewKey
-            )
-            
-            // MARK: - NAVIGATION TOOLBAR COMMENTED OUT
-            // Uncomment the section below to re-enable the navigation toolbar
-            /*
-            // Navigation controls
-            NavigationToolbar(
-                canGoBack: canGoBack,
-                canGoForward: canGoForward,
-                onBack: {
-                    NotificationCenter.default.post(name: .webViewGoBack, object: nil)
-                },
-                onForward: {
-                    NotificationCenter.default.post(name: .webViewGoForward, object: nil)
-                },
-                onRefresh: {
-                    NotificationCenter.default.post(name: .webViewReload, object: nil)
+            VStack(spacing: 0) {
+                // Loading indicator
+                if isLoading {
+                    ProgressView()
+                        .frame(height: 3)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 3)
                 }
-            )
-            */
+                
+                // WebView with pull-to-refresh
+                RefreshableWebView(
+                    url: webURL,
+                    canGoBack: $canGoBack,
+                    canGoForward: $canGoForward,
+                    isLoading: $isLoading,
+                    webViewKey: $webViewKey
+                )
+                
+                // MARK: - NAVIGATION TOOLBAR COMMENTED OUT
+                // Uncomment the section below to re-enable the navigation toolbar
+                /*
+                // Navigation controls
+                NavigationToolbar(
+                    canGoBack: canGoBack,
+                    canGoForward: canGoForward,
+                    onBack: {
+                        NotificationCenter.default.post(name: .webViewGoBack, object: nil)
+                    },
+                    onForward: {
+                        NotificationCenter.default.post(name: .webViewGoForward, object: nil)
+                    },
+                    onRefresh: {
+                        NotificationCenter.default.post(name: .webViewReload, object: nil)
+                    }
+                )
+                */
+            }
         }
         .ignoresSafeArea(.all, edges: .bottom)
     }
@@ -118,6 +127,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     var canGoBackBinding: Binding<Bool>!
     var canGoForwardBinding: Binding<Bool>!
     var isLoadingBinding: Binding<Bool>!
+    var lastBadgeCount: Int = 0
+    var badgePollTimer: Timer?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -125,10 +136,149 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         setupWebView()
         setupRefreshControl()
         setupNotificationObservers()
+        setupAppLifecycleObservers()
         
         if let url = url {
             webView.load(URLRequest(url: url))
         }
+    }
+    
+    private func setupAppLifecycleObservers() {
+        // Sync badge when app becomes active (returns from background)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        
+        // Sync badge when app enters foreground
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func appDidBecomeActive() {
+        print("📱 App became active, syncing badge...")
+        syncBadgeFromBackend()
+        startBadgePolling()
+    }
+    
+    @objc private func appWillEnterForeground() {
+        print("📱 App entering foreground, syncing badge...")
+        syncBadgeFromBackend()
+        startBadgePolling()
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        stopBadgePolling()
+    }
+    
+    private func startBadgePolling() {
+        // Stop any existing timer
+        stopBadgePolling()
+        
+        // Poll badge count every 30 seconds while app is active
+        print("⏱️ Starting badge polling (every 30 seconds)")
+        badgePollTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            print("⏱️ Periodic badge sync...")
+            self?.syncBadgeFromBackend()
+        }
+    }
+    
+    private func stopBadgePolling() {
+        badgePollTimer?.invalidate()
+        badgePollTimer = nil
+        print("⏹️ Stopped badge polling")
+    }
+    
+    private func syncBadgeFromBackend() {
+        // Fetch badge count directly from backend API
+        guard let url = URL(string: "https://blankee.example.com/get-unread-notification-count") else {
+            print("❌ Invalid badge sync URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10
+        
+        // Copy cookies from WebView to URLSession request
+        if let cookies = HTTPCookieStorage.shared.cookies(for: url) {
+            let headers = HTTPCookie.requestHeaderFields(with: cookies)
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Badge sync failed: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let data = data else {
+                print("❌ No data received from badge sync")
+                return
+            }
+            
+            // Debug: Print raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📋 Badge sync raw response: \(responseString.prefix(200))")
+            }
+            
+            // Check HTTP response status
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📊 Badge sync HTTP status: \(httpResponse.statusCode)")
+                if httpResponse.statusCode != 200 {
+                    print("⚠️ Badge sync returned non-200 status: \(httpResponse.statusCode)")
+                    return
+                }
+            }
+            
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let count = json["count"] as? Int {
+                    print("✅ Badge synced from backend: \(count)")
+                    
+                    DispatchQueue.main.async {
+                        // Check if badge increased (new notification while app was closed)
+                        if count > self.lastBadgeCount && self.lastBadgeCount >= 0 {
+                            let increase = count - self.lastBadgeCount
+                            print("🆕 Detected \(increase) new notification(s) while app was closed")
+                            let notificationBody = increase == 1 ?
+                                "You have 1 new notification" :
+                                "You have \(increase) new notifications"
+                            NotificationManager.shared.showLocalNotification(
+                                title: "Blankee",
+                                body: notificationBody,
+                                userInfo: ["badgeCount": count]
+                            )
+                        }
+                        
+                        self.lastBadgeCount = count
+                        NotificationManager.shared.updateBadge(count: count)
+                        
+                        // Also update the web page badge if it's loaded
+                        self.webView.evaluateJavaScript("""
+                            if (window.nativeApp) {
+                                console.log('🔄 Updating web badge from native sync: \(count)');
+                            }
+                        """)
+                    }
+                } else {
+                    print("⚠️ Unexpected badge sync response format")
+                }
+            } catch {
+                print("❌ Failed to parse badge sync response: \(error.localizedDescription)")
+            }
+        }.resume()
     }
     
     private func setupWebView() {
@@ -138,8 +288,10 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         let contentController = WKUserContentController()
         contentController.add(self, name: "nativeApp")
         
-        // Inject JavaScript bridge initialization
+        // Inject JavaScript bridge initialization with notification support
         let bridgeScript = """
+        console.log('🚀 iOS Native Bridge Initializing...');
+        
         window.nativeApp = {
             postMessage: function(message) {
                 window.webkit.messageHandlers.nativeApp.postMessage(message);
@@ -152,8 +304,112 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             },
             haptic: function(style) {
                 this.postMessage({ action: 'haptic', style: style || 'medium' });
+            },
+            sendNotification: function(title, body, data) {
+                console.log('📬 Sending notification to iOS:', title, body);
+                this.postMessage({ 
+                    action: 'sendNotification', 
+                    title: title, 
+                    body: body, 
+                    data: data || {} 
+                });
+            },
+            updateBadge: function(count) {
+                console.log('📛 Updating iOS badge to:', count);
+                this.postMessage({ 
+                    action: 'updateBadge', 
+                    count: count 
+                });
             }
         };
+        
+        console.log('✅ iOS Native Bridge Ready');
+        
+        // Setup notification interceptors after page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setupNotificationInterceptors();
+            });
+        } else {
+            setupNotificationInterceptors();
+        }
+        
+        function setupNotificationInterceptors() {
+            console.log('🔧 Setting up web app notification interceptors...');
+            
+            // Intercept the web app's refreshNotificationBadge function
+            var originalRefreshBadge = window.refreshNotificationBadge;
+            if (typeof originalRefreshBadge === 'function') {
+                window.refreshNotificationBadge = function() {
+                    console.log('🔔 refreshNotificationBadge called');
+                    originalRefreshBadge.apply(this, arguments);
+                    
+                    // Sync badge to iOS after web app updates it
+                    setTimeout(function() {
+                        var badgeElement = document.querySelector('.notification-badge');
+                        if (badgeElement && badgeElement.textContent) {
+                            var count = parseInt(badgeElement.textContent) || 0;
+                            console.log('📊 Badge count from DOM:', count);
+                            window.nativeApp.updateBadge(count);
+                        }
+                    }, 100);
+                };
+                console.log('✅ Intercepted refreshNotificationBadge');
+            }
+            
+            // Monitor AJAX calls for notification changes
+            if (typeof fetch !== 'undefined') {
+                var originalFetch = window.fetch;
+                window.fetch = function() {
+                    var args = arguments;
+                    var url = args[0];
+                    
+                    return originalFetch.apply(this, args).then(function(response) {
+                        if (url && typeof url === 'string') {
+                            if (url.includes('/save_totals_remainders') || 
+                                url.includes('/mark-notification-read') ||
+                                url.includes('/delete-notification')) {
+                                console.log('🔔 Detected notification-related request:', url);
+                                setTimeout(function() {
+                                    window.nativeApp.postMessage({ 
+                                        action: 'syncBadge' 
+                                    });
+                                }, 500);
+                            }
+                        }
+                        return response;
+                    });
+                };
+            }
+            
+            // Also intercept jQuery AJAX if available
+            if (typeof $ !== 'undefined' && $.ajax) {
+                var originalAjax = $.ajax;
+                $.ajax = function(settings) {
+                    var url = settings.url || '';
+                    var complete = settings.complete;
+                    
+                    settings.complete = function() {
+                        if (complete) complete.apply(this, arguments);
+                        
+                        if (url.includes('/save_totals_remainders') || 
+                            url.includes('/mark-notification-read') ||
+                            url.includes('/delete-notification')) {
+                            console.log('🔔 Detected notification AJAX:', url);
+                            setTimeout(function() {
+                                window.nativeApp.postMessage({ 
+                                    action: 'syncBadge' 
+                                });
+                            }, 500);
+                        }
+                    };
+                    
+                    return originalAjax.call(this, settings);
+                };
+            }
+            
+            console.log('✅ Web app notification interceptors ready');
+        }
         """
         let userScript = WKUserScript(source: bridgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         contentController.addUserScript(userScript)
@@ -215,6 +471,39 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         canGoBackBinding.wrappedValue = webView.canGoBack
         canGoForwardBinding.wrappedValue = webView.canGoForward
         refreshControl.endRefreshing()
+        
+        // Start periodic badge polling
+        startBadgePolling()
+        
+        // Sync badge count from web app after page loads
+        print("🔄 Page loaded, syncing notification badge...")
+        webView.evaluateJavaScript("""
+            (function() {
+                console.log('🔄 Page loaded, syncing badge...');
+                if (typeof fetch !== 'undefined') {
+                    fetch('/get-unread-notification-count')
+                        .then(r => r.json())
+                        .then(data => {
+                            console.log('📊 Badge count from server:', data.count);
+                            if (window.nativeApp && typeof data.count === 'number') {
+                                window.nativeApp.updateBadge(data.count);
+                            }
+                        })
+                        .catch(e => {
+                            console.log('❌ Badge sync error:', e);
+                        });
+                } else {
+                    console.log('⚠️ fetch not available');
+                }
+                console.log('✅ Badge sync JavaScript executed');
+            })();
+        """) { result, error in
+            if let error = error {
+                print("❌ Badge sync error: \(error.localizedDescription)")
+            } else {
+                print("✅ Badge sync JavaScript executed")
+            }
+        }
     }
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -247,22 +536,72 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
     
     private func handleJavaScriptMessage(_ message: [String: Any]) {
-        print("Received message from JavaScript: \(message)")
+        print("📨 Received message from JavaScript: \(message)")
         
         if let action = message["action"] as? String {
             switch action {
             case "requestNotificationPermission":
                 NotificationManager.shared.requestAuthorization()
+                
             case "log":
                 if let logMessage = message["message"] as? String {
                     print("JS Log: \(logMessage)")
                 }
+                
             case "haptic":
                 if let style = message["style"] as? String {
                     triggerHaptic(style: style)
                 }
+                
+            case "sendNotification":
+                let title = message["title"] as? String ?? "Blankee"
+                let body = message["body"] as? String ?? ""
+                let data = message["data"] as? [String: Any] ?? [:]
+                print("📬 Sending local notification: \(title) - \(body)")
+                NotificationManager.shared.showLocalNotification(title: title, body: body, userInfo: data)
+                
+            case "updateBadge":
+                if let count = message["count"] as? Int {
+                    print("📛 Updating badge to: \(count)")
+                    
+                    // Check if badge increased (new notification)
+                    if count > lastBadgeCount && lastBadgeCount >= 0 {
+                        let increase = count - lastBadgeCount
+                        print("🆕 Badge increased by \(increase), triggering notification")
+                        let notificationBody = increase == 1 ?
+                            "You have 1 new notification" :
+                            "You have \(increase) new notifications"
+                        NotificationManager.shared.showLocalNotification(
+                            title: "Blankee",
+                            body: notificationBody,
+                            userInfo: ["badgeCount": count]
+                        )
+                    }
+                    
+                    lastBadgeCount = count
+                    NotificationManager.shared.updateBadge(count: count)
+                }
+                
+            case "syncBadge":
+                print("🔄 Syncing badge after notification change...")
+                webView.evaluateJavaScript("""
+                    (function() {
+                        if (typeof fetch !== 'undefined') {
+                            fetch('/get-unread-notification-count')
+                                .then(r => r.json())
+                                .then(data => {
+                                    console.log('📊 Badge count from server:', data.count);
+                                    if (window.nativeApp && typeof data.count === 'number') {
+                                        window.nativeApp.updateBadge(data.count);
+                                    }
+                                })
+                                .catch(e => console.log('❌ Badge sync error:', e));
+                        }
+                    })();
+                """)
+                
             default:
-                print("Unknown action: \(action)")
+                print("⚠️ Unknown action: \(action)")
             }
         }
     }
