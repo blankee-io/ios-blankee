@@ -4,13 +4,13 @@
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>io.blankee.blankee.refresh</string>
+		<string>io.blankee.app.refresh</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>io.blankee.blankee</string>
+			<string>io.blankee.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>blankee</string>
