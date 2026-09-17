@@ -268,23 +268,24 @@ struct TrendView: View {
                             .overlay(Circle().strokeBorder(color, lineWidth: dense ? 1 : 1.5))
                             .frame(width: size, height: size)
                     }
-                    .annotation(position: .top, spacing: 2) {
-                        if index == window.todayIndex {
-                            Text("Today")
+                    // Labels sit above their point. The low is by definition
+                    // at the bottom of the plot, so a label under it lands on
+                    // the month axis and neither can be read; above, there is
+                    // always the rest of the chart. When today is also the
+                    // low, the two are one label rather than two on top of
+                    // each other. Kept inside the chart at either edge.
+                    .annotation(position: .top, spacing: 2,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        let isToday = index == window.todayIndex
+                        let isLow = index == lowIndex
+                        if isToday || isLow {
+                            let low = "Low " + Trends.short(point.value, symbol: symbol)
+                                + " · " + Trends.monthYearLabel(point.date)
+                            Text(isToday && isLow ? "Today · " + low : isLow ? low : "Today")
                                 .font(BlankeeFont.bold(7))
-                                .foregroundStyle(Color.blankeeAccent)
-                        }
-                    }
-                    // Under the point, so it never collides with "Today" when
-                    // the low is now; kept inside the chart's width when the
-                    // low sits at either edge.
-                    .annotation(position: .bottom, spacing: 2,
-                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                        if index == lowIndex {
-                            Text("Low " + Trends.short(point.value, symbol: symbol)
-                                 + " · " + Trends.monthYearLabel(point.date))
-                                .font(BlankeeFont.bold(7))
-                                .foregroundStyle(point.value < 0 ? Color.blankeeDanger : Color.blankeeWarning)
+                                .foregroundStyle(isLow
+                                    ? (point.value < 0 ? Color.blankeeDanger : Color.blankeeWarning)
+                                    : Color.blankeeAccent)
                                 .lineLimit(1)
                                 .fixedSize()
                         }
