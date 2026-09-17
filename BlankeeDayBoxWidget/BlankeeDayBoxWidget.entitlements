@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Must match the app target's groups exactly. If they differ, the suite
+	     and the keychain query both silently resolve to this extension's own
+	     container, and the widget behaves as though nobody ever signed in. -->
+	<!-- The group alone is the keychain sharing too: on iOS an app group is
+	     accepted as a keychain access group through this entitlement. Listing
+	     it under keychain-access-groups as well does not match the team's
+	     provisioning profile, and a device build refuses to sign. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.io.blankee.blankee</string>
+	</array>
+</dict>
+</plist>

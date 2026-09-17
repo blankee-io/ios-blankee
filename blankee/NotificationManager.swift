@@ -8,6 +8,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import WebKit
 
 class NotificationManager: NSObject, ObservableObject {
     static let shared = NotificationManager()
@@ -50,22 +51,68 @@ class NotificationManager: NSObject, ObservableObject {
         UserDefaults.standard.set(token, forKey: "deviceToken")
         
         // Send to backend
-        sendTokenToBackend(token)
+        Task { await sendTokenToBackend(token) }
+    }
+
+    /// The token and server the backend last confirmed, so a page load does
+    /// not re-register on every navigation - only when something changed, or
+    /// when nothing has been confirmed yet.
+    private var registeredToken: String?
+    private var registeredServer: URL?
+
+    /// Called when a page has loaded in the web view - the one moment it is
+    /// known whether someone is signed in.
+    ///
+    /// Registration needs a session: the server's register route is behind
+    /// login, and the token usually arrives at launch, before the web view has
+    /// signed anyone in. So the token is sent with the web view's own cookies,
+    /// and sent again here until the server has said yes. Without this, a
+    /// token that arrived on the login screen was posted once, bounced to
+    /// /login, and never tried again - which is why no device had ever been
+    /// registered on any server.
+    func ensureRegistered() {
+        guard let server = Config.serverURL else { return }
+        guard let token = UserDefaults.standard.string(forKey: "deviceToken") else {
+            // Authorised but never handed a token - iOS asks Apple again on
+            // request, and the token comes back through handleDeviceToken.
+            if isAuthorized {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+            return
+        }
+        guard registeredToken != token || registeredServer != server else { return }
+        Task { await sendTokenToBackend(token) }
     }
     
-    private func sendTokenToBackend(_ token: String) {
-        // TODO: Update this URL to match your backend's actual endpoint
-        guard let url = URL(string: "https://blankee.example.com/api/notifications/register") else {
-            print("Invalid backend URL")
+    @MainActor
+    private func sendTokenToBackend(_ token: String) async {
+        guard let server = Config.serverURL, let url = Config.registerDeviceTokenURL else {
+            print("No server configured yet - the token is saved and sent once there is one")
             return
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // TODO: Add authentication headers if required by your backend
-        // request.setValue("Bearer YOUR_API_KEY", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        // The web view keeps its cookies in its own store, not in the one
+        // URLSession reads, so a request built the ordinary way arrives signed
+        // out. Copying them across is what makes the route's login check pass.
+        let cookies = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+        if let host = url.host {
+            let relevant = cookies.filter { cookie in
+                host == cookie.domain || host.hasSuffix(cookie.domain) || cookie.domain.hasSuffix(host)
+            }
+            for (field, value) in HTTPCookie.requestHeaderFields(with: relevant) {
+                request.setValue(value, forHTTPHeaderField: field)
+            }
+            if relevant.isEmpty {
+                print("ℹ️ No session cookies yet; the device token will be sent once someone signs in")
+                return
+            }
+        }
         
         let body: [String: Any] = [
             "deviceToken": token,
@@ -79,54 +126,77 @@ class NotificationManager: NSObject, ObservableObject {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            
-            URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    print("❌ Failed to send token to backend: \(error.localizedDescription)")
-                    return
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return }
+
+            // A redirect to the login page comes back as a 200 for that page,
+            // because URLSession followed it. That is "not signed in", not
+            // "registered".
+            if response.url?.path.contains("login") == true || http.statusCode == 401 || http.statusCode == 403 {
+                print("ℹ️ Device token not registered: not signed in yet; will retry after sign-in")
+                return
+            }
+            if http.statusCode == 200 || http.statusCode == 201 {
+                registeredToken = token
+                registeredServer = server
+                print("✅ Device token registered with \(server.host ?? "server")")
+            } else {
+                print("⚠️ Token registration response: \(http.statusCode)")
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("Response body: \(responseString.prefix(300))")
                 }
-                
-                if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
-                        print("✅ Device token successfully registered with backend")
-                    } else {
-                        print("⚠️ Token registration response: \(httpResponse.statusCode)")
-                        if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                            print("Response body: \(responseString)")
-                        }
-                    }
-                }
-            }.resume()
+            }
         } catch {
-            print("❌ Failed to serialize token data: \(error.localizedDescription)")
+            print("❌ Failed to send token to backend: \(error.localizedDescription)")
         }
     }
     
+    /// The page a tapped notification should open, when the tap arrived
+    /// before the web view existed - the app was closed and the notification
+    /// is what launched it. The web view reads and clears this as it starts,
+    /// so the first page shown is the one the alert was about rather than the
+    /// landing page followed by a jump.
+    var pendingWebPath: String?
+
+    /// Somebody tapped a notification.
+    ///
+    /// The server sends one of two custom keys with an alert. `url` is the
+    /// relative path of the page the notification's own link points at - the
+    /// summary for a shortfall, the notifications list when there is no link.
+    /// `action` is the evening reminder's, and names no page: the prompt it
+    /// refers to is raised by the dashboard itself, so any dashboard will do
+    /// and "/" lets the server pick the person's landing page.
     func handleNotificationReceived(_ notification: UNNotification) {
-        print("Notification received: \(notification.request.content.userInfo)")
-        
-        // Extract notification data
         let userInfo = notification.request.content.userInfo
-        let title = notification.request.content.title
-        let body = notification.request.content.body
-        
-        print("📬 Notification Details:")
-        print("  Title: \(title)")
-        print("  Body: \(body)")
-        print("  Data: \(userInfo)")
-        
-        // TODO: Handle custom notification actions or deep linking
-        // For example, if the notification contains a URL to open:
-        // if let urlString = userInfo["url"] as? String, let url = URL(string: urlString) {
-        //     // Navigate to specific screen in webview
-        // }
+        print("📬 Notification tapped: \(userInfo)")
+
+        guard let path = Self.webPath(for: userInfo) else { return }
+        pendingWebPath = path
+        NotificationCenter.default.post(name: .openWebPath, object: path)
+    }
+
+    /// Only a relative path is ever opened. The server already refuses to send
+    /// anything else, and the same rule here means a payload from anywhere
+    /// other than the server cannot point the web view off the site.
+    static func webPath(for userInfo: [AnyHashable: Any]) -> String? {
+        if let url = userInfo["url"] as? String, url.hasPrefix("/"), !url.hasPrefix("//") {
+            return url
+        }
+        if userInfo["action"] as? String != nil {
+            return "/"
+        }
+        return nil
     }
     
     // Optional: Manually re-send token (useful for debugging or when user logs in)
     func resendDeviceToken() {
+        // A different server has never heard of this device, whatever the
+        // last one said.
+        registeredToken = nil
+        registeredServer = nil
         if let token = UserDefaults.standard.string(forKey: "deviceToken") {
             print("🔄 Resending device token to backend...")
-            sendTokenToBackend(token)
+            Task { await sendTokenToBackend(token) }
         } else {
             print("⚠️ No device token found to resend")
         }

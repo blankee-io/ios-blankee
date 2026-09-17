@@ -7,54 +7,36 @@
 
 import Foundation
 
-enum Environment {
-    case production
-    case goofdev     // goofdev environment
-    case dev         // dev environment
-    
-    var baseURL: String {
-        switch self {
-        case .production:
-            return "https://blankee.example.com"
-        case .goofdev:
-            return "http://192.0.2.45/"
-        case .dev:
-            return "http://192.0.2.44/"
-        }
-    }
-    
-    var displayName: String {
-        switch self {
-        case .production:
-            return "Blankee"
-        case .goofdev:
-            return "Blankee (Goof Dev)"
-        case .dev:
-            return "Blankee (Dev)"
-        }
-    }
-}
-
+/// Where the app points. Blankee is self-hosted, so the server is whatever the
+/// user entered on the setup screen - see ServerSettings - rather than a
+/// compile-time constant. Everything here is nil until they have entered one.
 struct Config {
-    // MARK: - Current Environment
-    // Change this line to switch between environments:
-    static let current: Environment = .goofdev
+    static var serverURL: URL? {
+        ServerSettings.shared.serverURL
+    }
     
-    // MARK: - Convenience Properties
-    static var baseURL: String {
-        current.baseURL
+    static var baseURL: String? {
+        serverURL?.absoluteString
     }
     
     static var displayName: String {
-        current.displayName
+        "Blankee"
     }
     
     // MARK: - API Endpoints
-    static var registerDeviceTokenURL: String {
-        "\(baseURL)/api/notifications/register"
+    
+    static var registerDeviceTokenURL: URL? {
+        endpoint("/api/notifications/register")
     }
     
-    static var unreadNotificationCountURL: String {
-        "\(baseURL)/get-unread-notification-count"
+    static var unreadNotificationCountURL: URL? {
+        endpoint("/get-unread-notification-count")
+    }
+    
+    /// Appends a path to the configured server, keeping any sub-path the user
+    /// typed: "https://example.com/blankee" + "/x" -> "https://example.com/blankee/x".
+    static func endpoint(_ path: String) -> URL? {
+        guard let serverURL else { return nil }
+        return URL(string: serverURL.absoluteString + path)
     }
 }

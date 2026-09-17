@@ -6,19 +6,56 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ContentView: View {
     @State private var canGoBack = false
     @State private var canGoForward = false
     @State private var isLoading = false
+    @StateObject private var settings = ServerSettings.shared
     @State private var showingError = false
+    @State private var loadError: WebLoadError?
+    @State private var hasRendered = false
+    @State private var showingServerSettings = false
     @State private var webViewKey = UUID()
     
-    var webURL: URL {
-        URL(string: Config.baseURL)!
+    var body: some View {
+        Group {
+            if let serverURL = settings.serverURL {
+                webApp(serverURL: serverURL)
+            } else {
+                // Nothing saved yet, so setup is the whole app.
+                ServerSetupView(mode: .firstRun)
+            }
+        }
+        .sheet(isPresented: $showingServerSettings) {
+            ServerSetupView(mode: .change)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openServerSettings)) { _ in
+            showingServerSettings = true
+        }
+        .onOpenURL { url in
+            // blankee://dashboard_d, from the home screen widget. The host is
+            // the page to show; the web view is already pointed at the right
+            // server, so only the path travels.
+            guard url.scheme == "blankee", let page = url.host, !page.isEmpty else { return }
+            NotificationCenter.default.post(name: .openWebPath, object: "/" + page)
+        }
+        .onChange(of: settings.serverURL) { previousServer, newServer in
+            guard newServer != nil else { return }
+            // A different server knows nothing of the old one's unread count,
+            // and has never heard of this device.
+            loadError = nil
+            hasRendered = false
+            NotificationManager.shared.updateBadge(count: 0)
+            NotificationManager.shared.resendDeviceToken()
+            // The widget's token was issued by the old server and means nothing
+            // to the new one.
+            WidgetBridge.serverChanged(to: newServer, previous: previousServer)
+        }
     }
     
-    var body: some View {
+    private func webApp(serverURL: URL) -> some View {
         ZStack {
             // Background color that extends into status bar area
             // Blankee header color: #2AAAA8
@@ -39,10 +76,12 @@ struct ContentView: View {
                 
                 // WebView with pull-to-refresh
                 RefreshableWebView(
-                    url: webURL,
+                    url: serverURL,
                     canGoBack: $canGoBack,
                     canGoForward: $canGoForward,
                     isLoading: $isLoading,
+                    loadError: $loadError,
+                    hasRendered: $hasRendered,
                     webViewKey: $webViewKey
                 )
                 
@@ -67,6 +106,98 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea(.all, edges: .bottom)
+        .overlay {
+            if loadError == nil && !hasRendered {
+                BlankeeConnectingView(host: serverURL.host ?? serverURL.absoluteString)
+            }
+        }
+        .overlay {
+            if let loadError {
+                ServerUnreachableView(
+                    error: loadError,
+                    onRetry: {
+                        self.loadError = nil
+                        NotificationCenter.default.post(name: .webViewReload, object: nil)
+                    },
+                    onChangeServer: {
+                        showingServerSettings = true
+                    }
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Connecting
+
+/// Shown while the first page is still on its way. Without it the app is a
+/// blank white rectangle for as long as the server takes to answer.
+struct BlankeeConnectingView: View {
+    let host: String
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            BlankeeSpinner(diameter: 48)
+            
+            Text("Connecting to \(host)")
+                .font(BlankeeFont.regular(14))
+                .foregroundStyle(Color.blankeeSecondaryDark)
+                .multilineTextAlignment(.center)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.blankeeBgPage)
+    }
+}
+
+// MARK: - Load Failure
+
+struct WebLoadError: Equatable {
+    let host: String
+    let message: String
+}
+
+/// Shown instead of a blank web view when the server does not answer - and the
+/// only way back to the settings when the saved address is the thing that is wrong.
+struct ServerUnreachableView: View {
+    let error: WebLoadError
+    let onRetry: () -> Void
+    let onChangeServer: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            BlankeeNavBar()
+            
+            Spacer(minLength: 0)
+            
+            BlankeeCard {
+                Text(FAIcon.triangleExclamation)
+                    .font(BlankeeFont.awesome(40))
+                    .foregroundStyle(Color.blankeeAccent)
+                
+                Text("Can't reach \(error.host)")
+                    .font(BlankeeFont.semibold(22))
+                    .foregroundStyle(Color.blankeeTextDark)
+                    .multilineTextAlignment(.center)
+                
+                Text(error.message)
+                    .font(BlankeeFont.regular(12))
+                    .foregroundStyle(Color.blankeeSecondaryDark)
+                    .multilineTextAlignment(.center)
+                
+                Button("Try again", action: onRetry)
+                    .buttonStyle(BlankeePrimaryButtonStyle())
+                    .padding(.top, 4)
+                
+                Button("Change server", action: onChangeServer)
+                    .buttonStyle(BlankeeSecondaryButtonStyle())
+            }
+            .padding(.horizontal, 16)
+            
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.blankeeBgPage)
     }
 }
 
@@ -77,6 +208,8 @@ struct RefreshableWebView: View {
     @Binding var canGoBack: Bool
     @Binding var canGoForward: Bool
     @Binding var isLoading: Bool
+    @Binding var loadError: WebLoadError?
+    @Binding var hasRendered: Bool
     @Binding var webViewKey: UUID
     
     var body: some View {
@@ -85,7 +218,9 @@ struct RefreshableWebView: View {
                 url: url,
                 canGoBack: $canGoBack,
                 canGoForward: $canGoForward,
-                isLoading: $isLoading
+                isLoading: $isLoading,
+                loadError: $loadError,
+                hasRendered: $hasRendered
             )
             .id(webViewKey)
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -100,6 +235,8 @@ struct WebViewContainer: UIViewControllerRepresentable {
     @Binding var canGoBack: Bool
     @Binding var canGoForward: Bool
     @Binding var isLoading: Bool
+    @Binding var loadError: WebLoadError?
+    @Binding var hasRendered: Bool
     
     func makeUIViewController(context: Context) -> WebViewController {
         let controller = WebViewController()
@@ -107,11 +244,22 @@ struct WebViewContainer: UIViewControllerRepresentable {
         controller.canGoBackBinding = $canGoBack
         controller.canGoForwardBinding = $canGoForward
         controller.isLoadingBinding = $isLoading
+        controller.loadErrorBinding = $loadError
+        controller.hasRenderedBinding = $hasRendered
         return controller
     }
     
     func updateUIViewController(_ uiViewController: WebViewController, context: Context) {
-        // Updates handled by WebViewController
+        uiViewController.loadErrorBinding = $loadError
+        uiViewController.hasRenderedBinding = $hasRendered
+        // Keeps the same web view when the user points the app at another server.
+        guard uiViewController.url != url else { return }
+        // Deferred: loading clears the error state, which must not happen in
+        // the middle of a SwiftUI update.
+        let target = url
+        DispatchQueue.main.async {
+            uiViewController.load(target)
+        }
     }
 }
 
@@ -120,27 +268,112 @@ struct WebViewContainer: UIViewControllerRepresentable {
 import UIKit
 import WebKit
 
-class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UIGestureRecognizerDelegate {
     var webView: WKWebView!
     var refreshControl: UIRefreshControl!
     var url: URL!
     var canGoBackBinding: Binding<Bool>!
     var canGoForwardBinding: Binding<Bool>!
     var isLoadingBinding: Binding<Bool>!
+    var loadErrorBinding: Binding<WebLoadError?>!
+    var hasRenderedBinding: Binding<Bool>!
     var lastBadgeCount: Int = 0
     var badgePollTimer: Timer?
+    var loadWatchdog: Timer?
+    
+    /// How long to wait for the server before giving up and saying so. WebKit's
+    /// own timeout is about a minute, which reads as a hung app when the address
+    /// is simply wrong.
+    static let loadTimeout: TimeInterval = 15
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         setupWebView()
         setupRefreshControl()
+        setupSettingsGesture()
         setupNotificationObservers()
         setupAppLifecycleObservers()
         
         if let url = url {
-            webView.load(URLRequest(url: url))
+            // A notification tap that launched the app arrived before there was
+            // a web view to hear it; start on its page rather than the landing
+            // page. Cleared here so a later reload does not go back to it.
+            if let path = NotificationManager.shared.pendingWebPath,
+               let target = URL(string: url.absoluteString + path) {
+                NotificationManager.shared.pendingWebPath = nil
+                startLoad(target)
+            } else {
+                startLoad(url)
+            }
         }
+    }
+    
+    /// Loads a different server, or does nothing if it is the one already showing.
+    func load(_ newURL: URL) {
+        guard url != newURL else { return }
+        url = newURL
+        lastBadgeCount = 0
+        loadErrorBinding?.wrappedValue = nil
+        hasRenderedBinding?.wrappedValue = false
+        startLoad(newURL)
+    }
+    
+    private func startLoad(_ target: URL) {
+        let request = URLRequest(
+            url: target,
+            cachePolicy: .useProtocolCachePolicy,
+            timeoutInterval: WebViewController.loadTimeout
+        )
+        webView.load(request)
+    }
+    
+    /// WebKit does not reliably honour a request's timeoutInterval, so time the
+    /// load here as well and stop it ourselves.
+    private func startWatchdog() {
+        stopWatchdog()
+        loadWatchdog = Timer.scheduledTimer(
+            withTimeInterval: WebViewController.loadTimeout,
+            repeats: false
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.webView.stopLoading()
+            self.isLoadingBinding.wrappedValue = false
+            self.refreshControl.endRefreshing()
+            print("⏱️ Load timed out after \(Int(WebViewController.loadTimeout))s")
+            self.loadErrorBinding?.wrappedValue = WebLoadError(
+                host: self.url?.host ?? "the server",
+                message: "The server did not answer within \(Int(WebViewController.loadTimeout)) seconds."
+            )
+        }
+    }
+    
+    private func stopWatchdog() {
+        loadWatchdog?.invalidate()
+        loadWatchdog = nil
+    }
+    
+    /// Two fingers held down opens the server settings. Two fingers because one
+    /// belongs to the web app - this must not swallow taps or text selection.
+    private func setupSettingsGesture() {
+        let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleSettingsGesture))
+        recognizer.numberOfTouchesRequired = 2
+        recognizer.minimumPressDuration = 0.6
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = self
+        webView.addGestureRecognizer(recognizer)
+    }
+    
+    @objc private func handleSettingsGesture(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        triggerHaptic(style: "medium")
+        NotificationCenter.default.post(name: .openServerSettings, object: nil)
+    }
+    
+    // MARK: - UIGestureRecognizerDelegate
+    
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
     }
     
     private func setupAppLifecycleObservers() {
@@ -197,9 +430,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
     
     private func syncBadgeFromBackend() {
-        // Fetch badge count directly from backend API
-        guard let url = URL(string: "https://blankee.example.com/get-unread-notification-count") else {
-            print("❌ Invalid badge sync URL")
+        // Fetch badge count from the server the user configured
+        guard let url = Config.unreadNotificationCountURL else {
+            print("❌ No server configured, skipping badge sync")
             return
         }
         
@@ -248,20 +481,13 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     print("✅ Badge synced from backend: \(count)")
                     
                     DispatchQueue.main.async {
-                        // Check if badge increased (new notification while app was closed)
-                        if count > self.lastBadgeCount && self.lastBadgeCount >= 0 {
-                            let increase = count - self.lastBadgeCount
-                            print("🆕 Detected \(increase) new notification(s) while app was closed")
-                            let notificationBody = increase == 1 ?
-                                "You have 1 new notification" :
-                                "You have \(increase) new notifications"
-                            NotificationManager.shared.showLocalNotification(
-                                title: "Blankee",
-                                body: notificationBody,
-                                userInfo: ["badgeCount": count]
-                            )
-                        }
-                        
+                        // The count only moves the badge. It used to raise a local
+                        // "You have N new notifications" alert whenever it had
+                        // risen since the app last looked - a stand-in for push
+                        // from before push worked. Now every notification arrives
+                        // as its own push, with its own text, so that alert was a
+                        // second buzz for the same thing, and one on every launch
+                        // with anything unread.
                         self.lastBadgeCount = count
                         NotificationManager.shared.updateBadge(count: count)
                         
@@ -320,6 +546,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     action: 'updateBadge', 
                     count: count 
                 });
+            },
+            openServerSettings: function() {
+                this.postMessage({ action: 'openServerSettings' });
             }
         };
         
@@ -413,6 +642,70 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         """
         let userScript = WKUserScript(source: bridgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         contentController.addUserScript(userScript)
+
+        // Tells the widget when the page has just saved something.
+        //
+        // The web app saves over AJAX and almost never navigates, so didFinish -
+        // the only other place a reload is triggered from - fires on launch and
+        // then essentially never again. Without this, adding an entry left the
+        // widget showing the old figures until its next 15-minute tick.
+        //
+        // Injected from here rather than added to the web app: a WKUserScript
+        // reaches the page's own JavaScript without changing a file on the
+        // server, which keeps this entirely inside the iOS app.
+        let widgetWatchScript = """
+        (function() {
+            if (window.__blankeeWidgetWatch) { return; }
+            window.__blankeeWidgetWatch = true;
+
+            var timer = null;
+            function changed() {
+                // One message per burst: saving a row fires several requests,
+                // and each reload spends from the widget's refresh budget.
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    if (window.nativeApp) { window.nativeApp.postMessage({ action: 'dataChanged' }); }
+                }, 1200);
+            }
+
+            function mutating(method) {
+                if (!method) { return false; }
+                var m = String(method).toUpperCase();
+                return m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS';
+            }
+
+            var open = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method) {
+                this.__blankeeMutating = mutating(method);
+                return open.apply(this, arguments);
+            };
+
+            var send = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function() {
+                if (this.__blankeeMutating) {
+                    this.addEventListener('loadend', function() {
+                        if (this.status >= 200 && this.status < 300) { changed(); }
+                    });
+                }
+                return send.apply(this, arguments);
+            };
+
+            if (window.fetch) {
+                var fetch0 = window.fetch;
+                window.fetch = function(input, init) {
+                    var method = (init && init.method) || (input && input.method) || 'GET';
+                    var p = fetch0.apply(this, arguments);
+                    if (mutating(method)) {
+                        p.then(function(r) { if (r && r.ok) { changed(); } }).catch(function() {});
+                    }
+                    return p;
+                };
+            }
+        })();
+        """
+        contentController.addUserScript(
+            WKUserScript(source: widgetWatchScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
         
         configuration.userContentController = contentController
         
@@ -442,10 +735,30 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         NotificationCenter.default.addObserver(self, selector: #selector(goBack), name: .webViewGoBack, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(goForward), name: .webViewGoForward, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(refreshWebView), name: .webViewReload, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openWebPath(_:)), name: .openWebPath, object: nil)
+    }
+
+    /// Navigates to a path on the server already loaded, which is what a widget
+    /// tap amounts to. Resolved against `url` rather than the web view's
+    /// current address so that a sub-path server - https://example.com/blankee
+    /// - keeps its prefix.
+    @objc private func openWebPath(_ note: Notification) {
+        guard let path = note.object as? String, let base = url else { return }
+        // Heard live, so the launch-time copy is spent.
+        NotificationManager.shared.pendingWebPath = nil
+        guard let target = URL(string: base.absoluteString + path) else { return }
+        loadErrorBinding?.wrappedValue = nil
+        webView.load(URLRequest(url: target, cachePolicy: .useProtocolCachePolicy,
+                                timeoutInterval: WebViewController.loadTimeout))
     }
     
     @objc private func refreshWebView() {
-        webView.reload()
+        if webView.url == nil, let url = url {
+            // The first attempt never landed, so there is nothing to reload.
+            startLoad(url)
+        } else {
+            webView.reload()
+        }
     }
     
     @objc private func goBack() {
@@ -464,16 +777,30 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoadingBinding.wrappedValue = true
+        loadErrorBinding?.wrappedValue = nil
+        startWatchdog()
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        stopWatchdog()
         isLoadingBinding.wrappedValue = false
+        hasRenderedBinding?.wrappedValue = true
         canGoBackBinding.wrappedValue = webView.canGoBack
         canGoForwardBinding.wrappedValue = webView.canGoForward
         refreshControl.endRefreshing()
         
         // Start periodic badge polling
         startBadgePolling()
+
+        // The widget reads the server directly, but only the app can mint it a
+        // token, and only the app knows an edit just happened. Both are handled
+        // here, so the home screen follows the app rather than its own timer.
+        if let serverURL = url {
+            WidgetBridge.webViewDidFinishLoad(webView, serverURL: serverURL)
+            // Same moment, same reason: a signed-in page is when the device can
+            // be registered for push, and the token may have arrived before it.
+            NotificationManager.shared.ensureRegistered()
+        }
         
         // Sync badge count from web app after page loads
         print("🔄 Page loaded, syncing notification badge...")
@@ -507,13 +834,27 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        isLoadingBinding.wrappedValue = false
-        refreshControl.endRefreshing()
+        reportLoadFailure(error)
     }
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        reportLoadFailure(error)
+    }
+    
+    private func reportLoadFailure(_ error: Error) {
+        stopWatchdog()
         isLoadingBinding.wrappedValue = false
         refreshControl.endRefreshing()
+        
+        let nsError = error as NSError
+        // A cancelled load is usually the next navigation starting, not a failure.
+        guard !(nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled) else { return }
+        
+        print("❌ Load failed: \(nsError.localizedDescription)")
+        loadErrorBinding?.wrappedValue = WebLoadError(
+            host: url?.host ?? "the server",
+            message: nsError.localizedDescription
+        )
     }
     
     // MARK: - WKUIDelegate
@@ -540,6 +881,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         
         if let action = message["action"] as? String {
             switch action {
+            case "dataChanged":
+                WidgetBridge.dataDidChange()
             case "requestNotificationPermission":
                 NotificationManager.shared.requestAuthorization()
                 
@@ -563,24 +906,13 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             case "updateBadge":
                 if let count = message["count"] as? Int {
                     print("📛 Updating badge to: \(count)")
-                    
-                    // Check if badge increased (new notification)
-                    if count > lastBadgeCount && lastBadgeCount >= 0 {
-                        let increase = count - lastBadgeCount
-                        print("🆕 Badge increased by \(increase), triggering notification")
-                        let notificationBody = increase == 1 ?
-                            "You have 1 new notification" :
-                            "You have \(increase) new notifications"
-                        NotificationManager.shared.showLocalNotification(
-                            title: "Blankee",
-                            body: notificationBody,
-                            userInfo: ["badgeCount": count]
-                        )
-                    }
-                    
+                    // Badge only - see the badge sync above for why no alert.
                     lastBadgeCount = count
                     NotificationManager.shared.updateBadge(count: count)
                 }
+                
+            case "openServerSettings":
+                NotificationCenter.default.post(name: .openServerSettings, object: nil)
                 
             case "syncBadge":
                 print("🔄 Syncing badge after notification change...")
@@ -620,6 +952,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        loadWatchdog?.invalidate()
+        badgePollTimer?.invalidate()
     }
 }
 
@@ -685,6 +1019,10 @@ extension Notification.Name {
     static let webViewGoBack = Notification.Name("webViewGoBack")
     static let webViewGoForward = Notification.Name("webViewGoForward")
     static let webViewReload = Notification.Name("webViewReload")
+    static let openServerSettings = Notification.Name("openServerSettings")
+    /// Sent when the home screen widget is tapped. The object is the path to
+    /// open, so one name covers any widget added later.
+    static let openWebPath = Notification.Name("openWebPath")
 }
 
 #Preview {

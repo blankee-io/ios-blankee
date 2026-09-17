@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E9A08B492F0249530075FA9C /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E9A08B422F0249530075FA9C /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E9DA0B01000000000000000E /* BlankeeDayBoxWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E9DA0B010000000000000001 /* BlankeeDayBoxWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,13 @@
 			remoteGlobalIDString = E9A08B412F0249530075FA9C;
 			remoteInfo = NotificationServiceExtension;
 		};
+		E9DA0B01000000000000000C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E98F2A092EB86C50009D8640 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E9DA0B010000000000000008;
+			remoteInfo = BlankeeDayBoxWidget;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,6 +50,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				E9A08B492F0249530075FA9C /* NotificationServiceExtension.appex in Embed Foundation Extensions */,
+				E9DA0B01000000000000000E /* BlankeeDayBoxWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,6 +62,7 @@
 		E98F2A1E2EB86C51009D8640 /* blankeeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = blankeeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E98F2A282EB86C51009D8640 /* blankeeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = blankeeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9A08B422F0249530075FA9C /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9DA0B010000000000000001 /* BlankeeDayBoxWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BlankeeDayBoxWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -69,6 +79,13 @@
 				Info.plist,
 			);
 			target = E9A08B412F0249530075FA9C /* NotificationServiceExtension */;
+		};
+		E9DA0B010000000000000003 /* Exceptions for "BlankeeDayBoxWidget" folder in "BlankeeDayBoxWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E9DA0B010000000000000008 /* BlankeeDayBoxWidget */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -97,6 +114,19 @@
 				E9A08B4D2F0249530075FA9C /* Exceptions for "NotificationServiceExtension" folder in "NotificationServiceExtension" target */,
 			);
 			path = NotificationServiceExtension;
+			sourceTree = "<group>";
+		};
+		E9DA0B010000000000000002 /* BlankeeDayBoxWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E9DA0B010000000000000003 /* Exceptions for "BlankeeDayBoxWidget" folder in "BlankeeDayBoxWidget" target */,
+			);
+			path = BlankeeDayBoxWidget;
+			sourceTree = "<group>";
+		};
+		E9DA0B010000000000000004 /* BlankeeShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BlankeeShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -130,6 +160,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E9DA0B010000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -140,6 +177,8 @@
 				E98F2A212EB86C51009D8640 /* blankeeTests */,
 				E98F2A2B2EB86C51009D8640 /* blankeeUITests */,
 				E9A08B432F0249530075FA9C /* NotificationServiceExtension */,
+				E9DA0B010000000000000002 /* BlankeeDayBoxWidget */,
+				E9DA0B010000000000000004 /* BlankeeShared */,
 				E98F2A122EB86C50009D8640 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -151,6 +190,7 @@
 				E98F2A1E2EB86C51009D8640 /* blankeeTests.xctest */,
 				E98F2A282EB86C51009D8640 /* blankeeUITests.xctest */,
 				E9A08B422F0249530075FA9C /* NotificationServiceExtension.appex */,
+				E9DA0B010000000000000001 /* BlankeeDayBoxWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,9 +211,11 @@
 			);
 			dependencies = (
 				E9A08B482F0249530075FA9C /* PBXTargetDependency */,
+				E9DA0B01000000000000000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E98F2A132EB86C50009D8640 /* blankee */,
+				E9DA0B010000000000000004 /* BlankeeShared */,
 			);
 			name = blankee;
 			packageProductDependencies = (
@@ -250,6 +292,29 @@
 			productReference = E9A08B422F0249530075FA9C /* NotificationServiceExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		E9DA0B010000000000000008 /* BlankeeDayBoxWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E9DA0B01000000000000000B /* Build configuration list for PBXNativeTarget "BlankeeDayBoxWidget" */;
+			buildPhases = (
+				E9DA0B010000000000000005 /* Sources */,
+				E9DA0B010000000000000006 /* Frameworks */,
+				E9DA0B010000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E9DA0B010000000000000002 /* BlankeeDayBoxWidget */,
+				E9DA0B010000000000000004 /* BlankeeShared */,
+			);
+			name = BlankeeDayBoxWidget;
+			packageProductDependencies = (
+			);
+			productName = BlankeeDayBoxWidget;
+			productReference = E9DA0B010000000000000001 /* BlankeeDayBoxWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -274,6 +339,9 @@
 					E9A08B412F0249530075FA9C = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					E9DA0B010000000000000008 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = E98F2A0C2EB86C50009D8640 /* Build configuration list for PBXProject "blankee" */;
@@ -294,6 +362,7 @@
 				E98F2A1D2EB86C51009D8640 /* blankeeTests */,
 				E98F2A272EB86C51009D8640 /* blankeeUITests */,
 				E9A08B412F0249530075FA9C /* NotificationServiceExtension */,
+				E9DA0B010000000000000008 /* BlankeeDayBoxWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -321,6 +390,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E9A08B402F0249530075FA9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E9DA0B010000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -358,6 +434,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E9DA0B010000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -375,6 +458,11 @@
 			isa = PBXTargetDependency;
 			target = E9A08B412F0249530075FA9C /* NotificationServiceExtension */;
 			targetProxy = E9A08B472F0249530075FA9C /* PBXContainerItemProxy */;
+		};
+		E9DA0B01000000000000000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E9DA0B010000000000000008 /* BlankeeDayBoxWidget */;
+			targetProxy = E9DA0B01000000000000000C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -701,6 +789,62 @@
 			};
 			name = Release;
 		};
+		E9DA0B010000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BlankeeDayBoxWidget/BlankeeDayBoxWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2AGQATM52J;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BlankeeDayBoxWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Blankee;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.blankee.blankee.BlankeeDayBoxWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E9DA0B01000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BlankeeDayBoxWidget/BlankeeDayBoxWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2AGQATM52J;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BlankeeDayBoxWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Blankee;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.blankee.blankee.BlankeeDayBoxWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -745,6 +889,15 @@
 			buildConfigurations = (
 				E9A08B4B2F0249530075FA9C /* Debug */,
 				E9A08B4C2F0249530075FA9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E9DA0B01000000000000000B /* Build configuration list for PBXNativeTarget "BlankeeDayBoxWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9DA0B010000000000000009 /* Debug */,
+				E9DA0B01000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -21,6 +21,9 @@ struct blankee_appApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        // Nunito and Font Awesome, the same files the web app serves
+        BlankeeFont.registerAll()
+        
         // Set notification delegate
         UNUserNotificationCenter.current().delegate = self
         
