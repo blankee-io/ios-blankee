@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The same group as the app and the widget: a push that came through
+	     the relay carries only a notification id, and the text is fetched from
+	     the person's server with the widget token that lives in this group's
+	     keychain. Without the group the extension sees no token and every such
+	     push shows its generic text. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.io.blankee.blankee</string>
+	</array>
+</dict>
+</plist>

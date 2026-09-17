@@ -50,8 +50,46 @@ class NotificationManager: NSObject, ObservableObject {
         // Save locally
         UserDefaults.standard.set(token, forKey: "deviceToken")
         
-        // Send to backend
-        Task { await sendTokenToBackend(token) }
+        // The relay first, then the server: the server's push asks the relay
+        // for this token, and the relay has to know it.
+        Task {
+            await registerWithRelay(token)
+            await sendTokenToBackend(token)
+        }
+    }
+
+    /// The secret shared with the relay and the server. Made once and kept in
+    /// the group keychain; a phone that has lost it (a reinstall that wiped
+    /// the group) makes a new one, and re-registering replaces the old.
+    private var relaySecret: String {
+        if let existing = WidgetStore.relaySecret { return existing }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let secret = bytes.map { String(format: "%02x", $0) }.joined()
+        WidgetStore.relaySecret = secret
+        return secret
+    }
+
+    /// Tells the relay this token exists and which secret goes with it. No
+    /// session needed - the relay knows nothing about accounts - so it can
+    /// happen the moment the token arrives.
+    private func registerWithRelay(_ token: String) async {
+        var request = URLRequest(url: Config.pushRelayURL.appendingPathComponent("v1/register"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "token": token,
+            "secret": relaySecret,
+            "environment": Config.pushEnvironment,
+        ])
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            print(status == 204 ? "✅ Registered with the push relay" : "⚠️ Push relay answered \(status)")
+        } catch {
+            print("⚠️ Could not reach the push relay: \(error.localizedDescription)")
+        }
     }
 
     /// The token and server the backend last confirmed, so a page load does
@@ -117,6 +155,10 @@ class NotificationManager: NSObject, ObservableObject {
         let body: [String: Any] = [
             "deviceToken": token,
             "platform": "ios",
+            // What the relay was told too, so the server can ask it for a
+            // push to this phone and nobody else can.
+            "relaySecret": relaySecret,
+            "environment": Config.pushEnvironment,
             "deviceInfo": [
                 "model": UIDevice.current.model,
                 "systemVersion": UIDevice.current.systemVersion,

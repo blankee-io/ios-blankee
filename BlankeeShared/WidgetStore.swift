@@ -73,44 +73,48 @@ enum WidgetStore {
     // MARK: - Token
 
     static var token: String? {
-        get {
-            var query = baseQuery
-            query[kSecReturnData as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
+        get { readSecret(account: keychainAccount) }
+        set { writeSecret(newValue, account: keychainAccount) }
+    }
 
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let data = item as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
-        }
-        set {
-            // Delete first rather than branching on add-or-update: the two
-            // paths differ only in which error they return for the state we
-            // are about to overwrite anyway.
-            SecItemDelete(baseQuery as CFDictionary)
-            guard let newValue, let data = newValue.data(using: .utf8) else { return }
+    /// The secret the app made up for the push relay and gave to both the
+    /// relay and the server. Kept here, in the group keychain, for the same
+    /// reasons as the token, and so a reinstall that keeps the group data
+    /// keeps its identity with the relay.
+    static var relaySecret: String? {
+        get { readSecret(account: "relay.secret") }
+        set { writeSecret(newValue, account: "relay.secret") }
+    }
 
-            var query = baseQuery
-            query[kSecValueData as String] = data
-            // afterFirstUnlock, not whenUnlocked: WidgetKit refreshes a timeline
-            // while the phone is sitting locked in a pocket, and whenUnlocked
-            // would hand it back nothing but errSecInteractionNotAllowed.
-            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    private static func readSecret(account: String) -> String? {
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
 
-            let status = SecItemAdd(query as CFDictionary, nil)
-            if status != errSecSuccess {
-                // errSecMissingEntitlement (-34018) here means the keychain
-                // access group does not match between the app and the widget.
-                print("⚠️ Widget token not saved to the keychain: OSStatus \(status)")
-            }
+    private static func writeSecret(_ value: String?, account: String) {
+        SecItemDelete(baseQuery(account: account) as CFDictionary)
+        guard let value, let data = value.data(using: .utf8) else { return }
+        var query = baseQuery(account: account)
+        query[kSecValueData as String] = data
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("⚠️ \(account) not saved to the keychain: OSStatus \(status)")
         }
     }
 
-    private static var baseQuery: [String: Any] {
+    private static var baseQuery: [String: Any] { baseQuery(account: keychainAccount) }
+
+    private static func baseQuery(account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "io.blankee.widget",
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: account,
             kSecAttrAccessGroup as String: blankeeAppGroup,
         ]
     }

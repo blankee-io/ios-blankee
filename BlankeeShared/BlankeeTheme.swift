@@ -10,6 +10,10 @@
 //
 
 import SwiftUI
+// Explicit: the spinner's timer publisher comes from Combine, which the app
+// target picks up through SwiftUI's re-export but the notification service
+// extension, which now shares this file, does not.
+import Combine
 import CoreText
 
 // MARK: - Colours (style.css :root)

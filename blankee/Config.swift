@@ -22,6 +22,23 @@ struct Config {
     static var displayName: String {
         "Blankee"
     }
+
+    /// The push relay (see relay/README.md in the server's source). The one
+    /// address in the app that is not the person's own server: Apple only
+    /// accepts a push from the key of the account that signed the app, so a
+    /// self-hosted server asks the relay, and the phone registers there too.
+    static let pushRelayURL = URL(string: "https://push.blankee.io")!
+
+    /// Which of Apple's two push environments this build's tokens belong to.
+    /// A build from Xcode carries the development entitlement and gets a
+    /// sandbox token; TestFlight and the App Store get production ones.
+    static var pushEnvironment: String {
+        #if DEBUG
+        return "sandbox"
+        #else
+        return "production"
+        #endif
+    }
     
     // MARK: - API Endpoints
     
