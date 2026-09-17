@@ -268,28 +268,56 @@ struct TrendView: View {
                             .overlay(Circle().strokeBorder(color, lineWidth: dense ? 1 : 1.5))
                             .frame(width: size, height: size)
                     }
-                    // Labels sit above their point. The low is by definition
-                    // at the bottom of the plot, so a label under it lands on
-                    // the month axis and neither can be read; above, there is
-                    // always the rest of the chart. When today is also the
-                    // low, the two are one label rather than two on top of
-                    // each other. Kept inside the chart at either edge.
                     .annotation(position: .top, spacing: 2,
-                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                        let isToday = index == window.todayIndex
-                        let isLow = index == lowIndex
-                        if isToday || isLow {
-                            let low = "Low " + Trends.short(point.value, symbol: symbol)
-                                + " · " + Trends.monthYearLabel(point.date)
-                            Text(isToday && isLow ? "Today · " + low : isLow ? low : "Today")
+                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                        if index == window.todayIndex {
+                            Text("Today")
                                 .font(BlankeeFont.bold(7))
-                                .foregroundStyle(isLow
-                                    ? (point.value < 0 ? Color.blankeeDanger : Color.blankeeWarning)
-                                    : Color.blankeeAccent)
-                                .lineLimit(1)
-                                .fixedSize()
+                                .foregroundStyle(Color.blankeeAccent)
                         }
                     }
+            }
+        }
+        // The low's label lives on its own line above the plot, with a leader
+        // down to the dot, so it can never share a line with "Today" - the
+        // low is at the bottom of the plot and today's label sits just over
+        // its dot, and a label pinned to either would land on the other, or
+        // on the month axis. The leader stops short of the "Today" label when
+        // the two points are one and the same.
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                if let lowIndex, let plotAnchor = proxy.plotFrame,
+                   let x = proxy.position(forX: Double(lowIndex)),
+                   let y = proxy.position(forY: points[lowIndex].value) {
+                    let plot = geo[plotAnchor]
+                    let low = points[lowIndex]
+                    let tint = low.value < 0 ? Color.blankeeDanger : Color.blankeeWarning
+                    let text = "Low " + Trends.short(low.value, symbol: symbol)
+                        + " · " + Trends.monthYearLabel(low.date)
+                    // About 4.1pt per character at this size; enough to keep
+                    // the label inside the plot when the low is at an edge.
+                    let width = CGFloat(text.count) * 4.1 + 8
+                    let dotX = plot.minX + x
+                    let dotY = plot.minY + y
+                    let labelX = min(max(dotX, plot.minX + width / 2), plot.maxX - width / 2)
+                    let labelBottom = plot.minY - 2
+                    let gap: CGFloat = lowIndex == window.todayIndex ? 16 : 6
+
+                    Path { path in
+                        path.move(to: CGPoint(x: labelX, y: labelBottom))
+                        path.addLine(to: CGPoint(x: dotX, y: dotY - gap))
+                    }
+                    .stroke(tint, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+
+                    Text(text)
+                        .font(BlankeeFont.bold(7))
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 3)
+                        .background(Color.blankeeWhite.opacity(0.9), in: Capsule())
+                        .position(x: labelX, y: labelBottom - 6)
+                }
             }
         }
         .chartXScale(domain: -0.4...(Double(max(points.count - 1, 1)) + 0.4))
@@ -319,7 +347,8 @@ struct TrendView: View {
         .padding(.leading, 4)
         .padding(.trailing, T.inset)
         .padding(.bottom, 4)
-        .padding(.top, 8)
+        // Room above the plot for the low's line of its own.
+        .padding(.top, 16)
     }
 
     // MARK: Series styling
