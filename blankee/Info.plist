@@ -2,18 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Self-hosted servers are usually plain http on the local network.
-	     NSAllowsLocalNetworking permits that for LAN addresses, .local names
-	     and localhost only; anything on the internet still needs https. -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Blankee connects to the Blankee server you run on your own network.</string>
-	<!-- The home screen widget opens blankee://dashboard_d when tapped.
-	     Answered in ContentView, which points the web view at that page. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>io.blankee.blankee.refresh</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -25,10 +17,15 @@
 			</array>
 		</dict>
 	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>io.blankee.blankee.refresh</string>
-	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Blankee connects to the Blankee server you run on your own network.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
