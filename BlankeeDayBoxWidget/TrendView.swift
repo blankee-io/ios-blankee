@@ -239,6 +239,11 @@ struct TrendView: View {
         // dots between them are left to speak for themselves.
         let labelStep = max(1, Int((Double(points.count) / 7).rounded(.up)))
         let dense = points.count > 16
+        // The low point of the stretch shown, called out the way the summary
+        // page's buffer card calls out the lowest the balance is projected to
+        // reach: the one number that says whether the months ahead are safe.
+        // The first of equal lows wins, so it is the soonest.
+        let lowIndex = points.indices.min { points[$0].value < points[$1].value }
 
         return Chart {
             ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
@@ -254,9 +259,12 @@ struct TrendView: View {
                 PointMark(x: .value("Month", index), y: .value("Balance", point.value))
                     .symbol {
                         let isToday = index == window.todayIndex
-                        let size: CGFloat = isToday ? (dense ? 8 : 9) : (dense ? 4 : 6)
+                        let isLow = index == lowIndex
+                        let size: CGFloat = (isToday || isLow) ? (dense ? 8 : 9) : (dense ? 4 : 6)
                         Circle()
-                            .fill(isToday ? Color.blankeeAccent : Color.blankeeWhite)
+                            .fill(isToday ? Color.blankeeAccent
+                                  : isLow ? (point.value < 0 ? Color.blankeeDanger : Color.blankeeWarning)
+                                  : Color.blankeeWhite)
                             .overlay(Circle().strokeBorder(color, lineWidth: dense ? 1 : 1.5))
                             .frame(width: size, height: size)
                     }
@@ -265,6 +273,20 @@ struct TrendView: View {
                             Text("Today")
                                 .font(BlankeeFont.bold(7))
                                 .foregroundStyle(Color.blankeeAccent)
+                        }
+                    }
+                    // Under the point, so it never collides with "Today" when
+                    // the low is now; kept inside the chart's width when the
+                    // low sits at either edge.
+                    .annotation(position: .bottom, spacing: 2,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                        if index == lowIndex {
+                            Text("Low " + Trends.short(point.value, symbol: symbol)
+                                 + " · " + Trends.monthYearLabel(point.date))
+                                .font(BlankeeFont.bold(7))
+                                .foregroundStyle(point.value < 0 ? Color.blankeeDanger : Color.blankeeWarning)
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                     }
             }
