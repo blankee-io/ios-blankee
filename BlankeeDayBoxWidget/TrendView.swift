@@ -239,11 +239,21 @@ struct TrendView: View {
         // dots between them are left to speak for themselves.
         let labelStep = max(1, Int((Double(points.count) / 7).rounded(.up)))
         let dense = points.count > 16
-        // The low point of the stretch shown, called out the way the summary
-        // page's buffer card calls out the lowest the balance is projected to
-        // reach: the one number that says whether the months ahead are safe.
-        // The first of equal lows wins, so it is the soonest.
-        let lowIndex = points.indices.min { points[$0].value < points[$1].value }
+        // The low, called out the way the summary page's buffer card calls out
+        // the lowest the balance is projected to reach. The server names the
+        // exact day it bottoms out; the label carries that day, and the leader
+        // points at the month dot that day falls in. An older server sends no
+        // low, and then the lowest month point stands in. The first of equal
+        // lows wins, so it is the soonest.
+        let monthlyLowIndex = points.indices.min { points[$0].value < points[$1].value }
+        let exactLow = series.low.flatMap { low -> (index: Int, point: TrendPoint)? in
+            guard let index = points.firstIndex(where: { $0.date.prefix(7) == low.date.prefix(7) }) else { return nil }
+            return (index, low)
+        }
+        let lowIndex = exactLow?.index ?? monthlyLowIndex
+        let lowPoint = exactLow?.point ?? lowIndex.map { points[$0] }
+        let lowDateLabel = exactLow.map { Trends.dayLabel($0.point.date) }
+            ?? lowPoint.map { Trends.monthYearLabel($0.date) } ?? ""
 
         return Chart {
             ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
@@ -286,14 +296,12 @@ struct TrendView: View {
         // the two points are one and the same.
         .chartOverlay { proxy in
             GeometryReader { geo in
-                if let lowIndex, let plotAnchor = proxy.plotFrame,
+                if let lowIndex, let low = lowPoint, let plotAnchor = proxy.plotFrame,
                    let x = proxy.position(forX: Double(lowIndex)),
                    let y = proxy.position(forY: points[lowIndex].value) {
                     let plot = geo[plotAnchor]
-                    let low = points[lowIndex]
                     let tint = low.value < 0 ? Color.blankeeDanger : Color.blankeeWarning
-                    let text = "Low " + Trends.short(low.value, symbol: symbol)
-                        + " · " + Trends.monthYearLabel(low.date)
+                    let text = "Low " + Trends.short(low.value, symbol: symbol) + " · " + lowDateLabel
                     // About 4.1pt per character at this size; enough to keep
                     // the label inside the plot when the low is at an edge.
                     let width = CGFloat(text.count) * 4.1 + 8

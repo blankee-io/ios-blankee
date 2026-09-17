@@ -27,6 +27,14 @@ struct TrendSeries: Decodable, Identifiable {
     let kind: Kind
     let name: String
     let points: [TrendPoint]
+    /// The lowest *day* from today on, which the month points cannot show:
+    /// a month's point is its last day, and the balance bottoms out somewhere
+    /// inside the month. Absent from servers older than 1.43.9.
+    let low: TrendPoint?
+
+    init(id: String, kind: Kind, name: String, points: [TrendPoint], low: TrendPoint? = nil) {
+        self.id = id; self.kind = kind; self.name = name; self.points = points; self.low = low
+    }
 }
 
 struct Trends: Decodable {
@@ -154,6 +162,13 @@ extension Trends {
         let parts = isoDate.split(separator: "-")
         guard parts.count >= 2, let month = Int(parts[1]), (1...12).contains(month) else { return "" }
         return months[month - 1]
+    }
+
+    /// "Sep 23 '26" - a day, for the low.
+    static func dayLabel(_ isoDate: String) -> String {
+        let parts = isoDate.split(separator: "-")
+        guard parts.count == 3, let day = Int(parts[2]) else { return monthYearLabel(isoDate) }
+        return monthLabel(isoDate) + " " + String(day) + " '" + String(parts[0].suffix(2))
     }
 
     /// "Sep '26" - the page's daily label shape, which is the one that still
