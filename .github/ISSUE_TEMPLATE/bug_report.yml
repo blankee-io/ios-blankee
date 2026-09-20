@@ -1,0 +1,82 @@
+name: Bug report
+description: Something in the iOS app does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. If this is a security problem, please do not
+        file it here — see [SECURITY.md](https://github.com/blankee-io/ios-blankee/blob/main/SECURITY.md).
+
+        If the problem is with a figure — a wrong total, a forecast in the wrong
+        week — it is almost certainly the server's, since every number the app
+        shows is computed there. Those belong in
+        [blankee-app](https://github.com/blankee-io/blankee-app/issues).
+
+  - type: input
+    id: app
+    attributes:
+      label: App version and build
+      description: Settings inside the app, or the version under the App Store listing.
+      placeholder: "1.0 (5)"
+    validations:
+      required: true
+
+  - type: input
+    id: ios
+    attributes:
+      label: Device and iOS version
+      placeholder: "iPhone 15 Pro, iOS 26.0"
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: Server version
+      description: The version in the footer of your Blankee server, since the app and server move separately.
+      placeholder: "1.45.0"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - The app itself
+        - A home screen widget
+        - A push notification
+        - Signing in or connecting to a server
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        The day box widget showed "Signed out" after I reinstalled the app, even though
+        I was signed in when I opened it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If it happened once and you cannot repeat it, say so — that is still worth reporting.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is about the app, not a figure the server computes
+          required: false
+        - label: This is not a security problem (those go through SECURITY.md)
+          required: true
