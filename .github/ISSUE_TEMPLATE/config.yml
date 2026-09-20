@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/blankee-io/ios-blankee/security/advisories/new
+    about: Report privately, never in an issue - see SECURITY.md.
+  - name: The server, bank sync, forecasts
+    url: https://github.com/blankee-io/blankee-app/issues
+    about: Anything that is not the app itself belongs in the server's repository.
+  - name: How to contribute
+    url: https://github.com/blankee-io/ios-blankee/blob/main/CONTRIBUTING.md
+    about: Building it, what a fork must change, and the conventions.

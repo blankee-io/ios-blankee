@@ -1,0 +1,50 @@
+# The sign-off check. No build job: building this needs a signing team and an
+# Xcode runner, and a macOS runner on every pull request is not worth it for a
+# project this size - the maintainer builds it before cutting a release.
+#
+# Guarded by repository, so a fork does not spend its own Actions minutes.
+name: Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sign-off:
+    name: Sign-off (DCO)
+    if: github.repository == 'blankee-io/ios-blankee'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Every commit carries Signed-off-by
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if [ -z "$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$sha")" ]; then
+              echo "::error::$(git log -1 --format='%h %s' "$sha") has no Signed-off-by"
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "$missing commit(s) are missing a sign-off."
+            echo ""
+            echo "The Developer Certificate of Origin (https://developercertificate.org)"
+            echo "is how this project records that you have the right to submit your"
+            echo "change. Nothing to sign, nothing to post - just the line git adds:"
+            echo ""
+            echo "  last commit only:   git commit -s --amend --no-edit"
+            echo "  the whole branch:   git rebase --signoff main"
+            echo ""
+            echo "then: git push --force-with-lease"
+            exit 1
+          fi
+          echo "all commits signed off"
