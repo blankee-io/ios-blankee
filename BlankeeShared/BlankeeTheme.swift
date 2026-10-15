@@ -160,6 +160,14 @@ enum FAIcon {
     static let arrowTrendUp = "\u{e098}"
     static let arrowTrendDown = "\u{e097}"
     static let minus = "\u{f068}"
+
+    // The Upcoming Bills widget: the page's section icon, its filter button,
+    // the pin, and the paid / unpaid mark (the page's unpaid one is a Pro kit
+    // glyph with a slash; the Free face has none, so colour carries it).
+    static let receipt = "\u{f543}"
+    static let filter = "\u{f0b0}"
+    static let thumbtack = "\u{f08d}"
+    static let handHoldingDollar = "\u{f4c0}"
 }
 
 // MARK: - Spinner (style.css .spinner-circle / #loading-spinner)
