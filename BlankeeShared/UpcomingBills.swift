@@ -11,9 +11,12 @@
 //  and each card's - with its last occurrence and the one coming up, in the
 //  page's order (the person's pinned bills first, then soonest first).
 //
-//  The widget filters the rows itself, with the same three questions as the
-//  page's filter: paid from the budget or a card, a bill or a bucket, and
-//  unpaid or paid this month.
+//  Income comes too (2026-10-23): the server sends it to an app that asks
+//  (?income=1), each row saying whether it is income or a bill.
+//
+//  The widget filters the rows itself, with the same four questions as the
+//  page's filter: bills or income, paid from the budget or a card (bills
+//  only), a bill or a bucket, and unpaid or paid this month.
 //
 
 import Foundation
@@ -34,8 +37,11 @@ struct BillSide: Decodable {
 }
 
 struct BillRow: Decodable, Identifiable {
-    /// 'e:<id>' for the budget's, 'c:<id>' for a card's.
+    /// 'e:<id>' for the budget's, 'c:<id>' for a card's, 'i:<id>' for an income.
     let key: String
+    /// "income" or "expense". Missing from a server before income rows,
+    /// which only ever sent bills.
+    let flow: String?
     let name: String
     /// The card's name, on a card's row.
     let accountName: String?
@@ -49,9 +55,10 @@ struct BillRow: Decodable, Identifiable {
 
     var id: String { key }
     var isCard: Bool { key.hasPrefix("c:") }
+    var isIncome: Bool { flow == "income" }
 
     private enum CodingKeys: String, CodingKey {
-        case key, name, pinned, last, upcoming
+        case key, flow, name, pinned, last, upcoming
         case accountName = "account_name"
         case isBill = "is_bill"
         case paidThisMonth = "paid_this_month"
@@ -109,21 +116,23 @@ struct UpcomingBills: Decodable {
 
 // MARK: - The filter
 
-/// The page's three filter questions. Each widget button steps through its
+/// The page's four filter questions. Each widget button steps through its
 /// answers, "all" first, and comes back round.
 enum BillFilter {
 
     enum Question: String, CaseIterable {
-        case source, kind, status
+        case flow, source, kind, status
     }
 
     struct Selection {
+        var flow: String = "all"     // all, expense, income
         var source: String = "all"   // all, budget, card
         var kind: String = "all"     // all, bill, bucket
         var status: String = "all"   // all, unpaid, paid
 
         func value(_ question: Question) -> String {
             switch question {
+            case .flow: return flow
             case .source: return source
             case .kind: return kind
             case .status: return status
@@ -131,10 +140,13 @@ enum BillFilter {
         }
 
         /// The same rule as the page's billMatches(). Buckets are neither paid
-        /// nor unpaid, so either of those shows bills only.
+        /// nor unpaid, so either of those shows bills only. Paid from is a
+        /// question about bills, so an income is left alone by it.
         func matches(_ row: BillRow) -> Bool {
-            if source == "budget" && row.isCard { return false }
-            if source == "card" && !row.isCard { return false }
+            if flow == "expense" && row.isIncome { return false }
+            if flow == "income" && !row.isIncome { return false }
+            if !row.isIncome && source == "budget" && row.isCard { return false }
+            if !row.isIncome && source == "card" && !row.isCard { return false }
             if kind == "bill" && !row.isBill { return false }
             if kind == "bucket" && row.isBill { return false }
             if status == "unpaid" && !row.dueThisMonth { return false }
@@ -142,11 +154,12 @@ enum BillFilter {
             return true
         }
 
-        var isFiltering: Bool { source != "all" || kind != "all" || status != "all" }
+        var isFiltering: Bool { flow != "all" || source != "all" || kind != "all" || status != "all" }
     }
 
     static func answers(_ question: Question) -> [String] {
         switch question {
+        case .flow: return ["all", "expense", "income"]
         case .source: return ["all", "budget", "card"]
         case .kind: return ["all", "bill", "bucket"]
         case .status: return ["all", "unpaid", "paid"]
@@ -157,6 +170,9 @@ enum BillFilter {
     /// never reads as a choice it is not.
     static func label(_ question: Question, _ value: String) -> String {
         switch (question, value) {
+        case (.flow, "expense"): return "Bills"
+        case (.flow, "income"): return "Income"
+        case (.flow, _): return "In & out"
         case (.source, "budget"): return "Budget"
         case (.source, "card"): return "Cards"
         case (.source, _): return "Budget & cards"
@@ -175,6 +191,7 @@ enum BillFilter {
             let stored = WidgetStore.filterValue(question.rawValue, for: kind)
             let value = answers(question).contains(stored ?? "") ? stored! : "all"
             switch question {
+            case .flow: s.flow = value
             case .source: s.source = value
             case .kind: s.kind = value
             case .status: s.status = value
@@ -196,6 +213,9 @@ enum BillFilter {
 
 enum UpcomingBillsService {
     static func fetch() async throws -> UpcomingBills {
-        try await WidgetAPI.fetch(UpcomingBills.self, path: "/api/widget/upcoming-bills", definesSupport: false)
+        // income=1: this app knows income rows. Without it the server sends
+        // bills only, which is what a widget from before expects.
+        try await WidgetAPI.fetch(UpcomingBills.self, path: "/api/widget/upcoming-bills",
+                                  query: [URLQueryItem(name: "income", value: "1")], definesSupport: false)
     }
 }

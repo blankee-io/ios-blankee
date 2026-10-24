@@ -258,7 +258,7 @@ struct UpcomingBillsView: View {
             if bills.rows.isEmpty {
                 empty("No recurring bills yet")
             } else if shown.isEmpty {
-                empty("No bills match the filter")
+                empty("Nothing matches the filter")
             } else {
                 VStack(spacing: 0) {
                     ForEach(page(of: shown)) { row in
@@ -282,7 +282,7 @@ struct UpcomingBillsView: View {
     }
 
     /// The page's row: tinted for the budget, white for a card with its name,
-    /// the pin on a pinned one, then both sides.
+    /// teal for income, the pin on a pinned one, then both sides.
     private func billRow(_ row: BillRow, bills: UpcomingBills) -> some View {
         HStack(spacing: 6) {
             HStack(spacing: 4) {
@@ -307,24 +307,26 @@ struct UpcomingBillsView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 2)
-            side(row.last, isBill: row.isBill, bills: bills)
+            side(row.last, isBill: row.isBill, income: row.isIncome, bills: bills)
                 .opacity(0.5)
             Rectangle().fill(Color.blankeeSecondaryHover).frame(width: 1, height: U.rowHeight - 12)
-            side(row.upcoming, isBill: row.isBill, bills: bills)
+            side(row.upcoming, isBill: row.isBill, income: row.isIncome, bills: bills)
         }
         .padding(.horizontal, U.inset)
         .frame(height: U.rowHeight)
         .frame(maxWidth: .infinity)
-        .background(row.isCard ? Color.blankeeWhite : Color.blankeeAccentLighter)
+        .background(row.isIncome ? Color.blankeePrimaryLighter
+                    : (row.isCard ? Color.blankeeWhite : Color.blankeeAccentLighter))
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.blankeeSecondaryLighter).frame(height: 1)
         }
     }
 
     /// One side: the date, then a bill's paid or unpaid mark, or a bucket's
-    /// bar and what is left. A missing side is a dash, as on the page.
+    /// bar and what is left. A missing side is a dash, as on the page. An
+    /// income says it in its own words: received or expected, still to come.
     @ViewBuilder
-    private func side(_ side: BillSide?, isBill: Bool, bills: UpcomingBills) -> some View {
+    private func side(_ side: BillSide?, isBill: Bool, income: Bool, bills: UpcomingBills) -> some View {
         VStack(spacing: 1) {
             if let side {
                 Text(side.date.map(Self.dayLabel) ?? "")
@@ -334,9 +336,10 @@ struct UpcomingBillsView: View {
                     Text(FAIcon.handHoldingDollar)
                         .font(BlankeeFont.awesome(10))
                         .foregroundStyle(side.paid ? Color.blankeeSuccess : Color.blankeeDanger)
-                        .accessibilityLabel(side.paid ? "Paid" : "Unpaid")
+                        .accessibilityLabel(income ? (side.paid ? "Received" : "Expected")
+                                                   : (side.paid ? "Paid" : "Unpaid"))
                 } else {
-                    bucket(side, bills: bills)
+                    bucket(side, income: income, bills: bills)
                 }
             } else {
                 Text("—")
@@ -347,22 +350,29 @@ struct UpcomingBillsView: View {
         .frame(width: U.sideWidth)
     }
 
-    private func bucket(_ side: BillSide, bills: UpcomingBills) -> some View {
+    /// A bucket spent down - or, for income, filling up: the bar is what has
+    /// come in, and going past it is good news rather than overspending.
+    private func bucket(_ side: BillSide, income: Bool, bills: UpcomingBills) -> some View {
         let spent = side.originalAmount - side.currentAmount
         let share = side.originalAmount > 0 ? min(max(spent / side.originalAmount, 0), 1) : 0
         let over = side.currentAmount < 0
+        let barColor = income ? Color.blankeePrimary
+            : (over || share >= 1 ? Color.blankeeDanger : Color.blankeeSuccess)
+        let text = over
+            ? bills.format(abs(side.currentAmount)) + (income ? " extra" : " over")
+            : bills.format(side.currentAmount) + (income ? " to come" : " left")
         return VStack(spacing: 1) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.blankeeSecondaryHover)
-                    Capsule().fill(over || share >= 1 ? Color.blankeeDanger : Color.blankeeSuccess)
+                    Capsule().fill(barColor)
                         .frame(width: geo.size.width * share)
                 }
             }
             .frame(height: 3)
-            Text(over ? bills.format(abs(side.currentAmount)) + " over" : bills.format(side.currentAmount) + " left")
+            Text(text)
                 .font(BlankeeFont.semibold(8))
-                .foregroundStyle(over ? Color.blankeeDanger : Color.blankeePrimary)
+                .foregroundStyle(over && !income ? Color.blankeeDanger : Color.blankeePrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -407,7 +417,7 @@ struct BlankeeUpcomingBillsWidget: Widget {
                 }
         }
         .configurationDisplayName("Upcoming bills")
-        .description("The summary page's bills and buckets, last and next, filtered your way.")
+        .description("The summary page's bills, buckets and income, last and next, filtered your way.")
         .supportedFamilies([.systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
@@ -424,6 +434,7 @@ extension UpcomingBills {
             BillRow.sample("c:2", "Streaming", card: "Visa", last: ("2026-09-06", 17.99, 0, true), next: ("2026-10-06", 17.99, 17.99, false)),
             BillRow.sample("e:3", "Groceries", bill: false, last: ("2026-09-25", 150, -12, false), next: ("2026-10-09", 150, 64.5, false)),
             BillRow.sample("e:4", "Electric", last: ("2026-09-12", 96, 0, true), next: ("2026-10-12", 96, 96, false)),
+            BillRow.sample("i:5", "Paycheck", income: true, last: ("2026-09-30", 2100, 0, true), next: ("2026-10-15", 2100, 2100, false)),
         ],
         dataVersion: "0"
     )
@@ -431,8 +442,9 @@ extension UpcomingBills {
 
 private extension BillRow {
     static func sample(_ key: String, _ name: String, card: String? = nil, bill: Bool = true, pinned: Bool = false,
+                       income: Bool = false,
                        last: (String, Double, Double, Bool), next: (String, Double, Double, Bool)) -> BillRow {
-        BillRow(key: key, name: name, accountName: card, isBill: bill, pinned: pinned,
+        BillRow(key: key, flow: income ? "income" : "expense", name: name, accountName: card, isBill: bill, pinned: pinned,
                 last: BillSide(date: last.0, originalAmount: last.1, currentAmount: last.2, paid: last.3),
                 upcoming: BillSide(date: next.0, originalAmount: next.1, currentAmount: next.2, paid: next.3),
                 paidThisMonth: false, dueThisMonth: bill)
