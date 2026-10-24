@@ -164,6 +164,26 @@ enum WidgetStore {
         setListPage(listPage(for: kind) + delta, for: kind)
     }
 
+    /// A list widget's own filter choices - the Upcoming Bills widget's three
+    /// buttons - one string per question, keyed by widget kind so a medium and
+    /// a large one can be set differently. Nil is "all", the list unfiltered.
+    /// The widget's own: the Summary page keeps its filter on the server.
+    static func filterValue(_ question: String, for kind: String) -> String? {
+        defaults?.string(forKey: filterKey(question, kind))
+    }
+
+    static func setFilterValue(_ value: String?, _ question: String, for kind: String) {
+        if let value {
+            defaults?.set(value, forKey: filterKey(question, kind))
+        } else {
+            defaults?.removeObject(forKey: filterKey(question, kind))
+        }
+    }
+
+    private static func filterKey(_ question: String, _ kind: String) -> String {
+        "widget.filter.\(kind).\(question)"
+    }
+
     private static func pageKey(_ kind: String) -> String { "widget.listPage.\(kind)" }
 
     private static func offsetKey(_ kind: String) -> String { "widget.dayOffset.\(kind)" }

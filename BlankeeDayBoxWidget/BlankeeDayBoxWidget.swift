@@ -201,6 +201,7 @@ struct BlankeeWidgetBundle: WidgetBundle {
         BlankeeMonthDayWidget()
         BlankeeDueTodayWidget()
         BlankeeTrendWidget()
+        BlankeeUpcomingBillsWidget()
     }
 }
 
